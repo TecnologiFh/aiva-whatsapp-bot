@@ -16,30 +16,29 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
 
-// 1. Endpoint GET de Verificación para Meta Developers (Desafío hub.challenge)
-app.get('/', (req, res) => {
+// 1. Endpoints GET universales de Verificación para Meta Developers
+const handleVerification = (req, res) => {
+    const mode = req.query['hub.mode'] || req.query['hub_mode'];
+    const token = req.query['hub.verify_token'] || req.query['hub_verify_token'];
+    const challenge = req.query['hub.challenge'] || req.query['hub_challenge'];
+
+    if (challenge) {
+        console.log('✅ Webhook verificado correctamente por Meta. Challenge:', challenge);
+        return res.status(200).send(challenge);
+    }
+
     res.json({
         status: 'ONLINE',
         system: 'AIVA WhatsApp Enterprise Gateway (Render.com Cloud 24/7)',
         timestamp: new Date().toISOString()
     });
-});
+};
 
-app.get('/webhook', (req, res) => {
-    const mode = req.query['hub.mode'] || req.query['hub_mode'];
-    const token = req.query['hub.verify_token'] || req.query['hub_verify_token'];
-    const challenge = req.query['hub.challenge'] || req.query['hub_challenge'];
+app.get('/', handleVerification);
+app.get('/webhook', handleVerification);
 
-    if (mode === 'subscribe' && (token === VERIFY_TOKEN || !token)) {
-        console.log('✅ Webhook verificado correctamente por Meta.');
-        return res.status(200).send(challenge);
-    }
-
-    return res.status(200).send(challenge || 'AIVA Webhook Active');
-});
-
-// 2. Endpoint POST para Recepción de Mensajes de Clientes en Tiempo Real
-app.post('/webhook', async (req, res) => {
+// 2. Endpoints POST universales para Recepción de Mensajes en Tiempo Real
+const handleIncoming = async (req, res) => {
     // Responder HTTP 200 OK inmediatamente a Meta
     res.status(200).send('EVENT_RECEIVED');
 
@@ -115,28 +114,35 @@ REGLA DE ORO DE EMPRESA: Tu empresa ÚNICAMENTE vende donas artesanales, tortas 
 
         // Responder al WhatsApp del Cliente mediante Meta Cloud API
         if (WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_ACCESS_TOKEN) {
-            await axios.post(
-                `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-                {
-                    messaging_product: 'whatsapp',
-                    recipient_type: 'individual',
-                    to: from,
-                    type: 'text',
-                    text: { preview_url: false, body: replyText }
-                },
-                {
-                    headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
-                }
-            );
-            console.log(`📤 Respuesta enviada exitosamente a ${from}`);
+            try {
+                const metaRes = await axios.post(
+                    `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+                    {
+                        messaging_product: 'whatsapp',
+                        recipient_type: 'individual',
+                        to: from,
+                        type: 'text',
+                        text: { preview_url: false, body: replyText }
+                    },
+                    {
+                        headers: { Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+                    }
+                );
+                console.log(`📤 Respuesta enviada exitosamente a ${from}. Message ID:`, metaRes.data?.messages?.[0]?.id);
+            } catch (metaErr) {
+                console.error('❌ Error enviando mensaje por Meta API:', JSON.stringify(metaErr.response?.data || metaErr.message));
+            }
         } else {
-            console.log(`ℹ️ [Modo Prueba] Respuesta generada: "${replyText}"`);
+            console.log(`ℹ️ [Atención] Faltan credenciales de Meta. Configura WHATSAPP_PHONE_NUMBER_ID y WHATSAPP_ACCESS_TOKEN en las variables de Render. Respuesta generada: "${replyText}"`);
         }
 
     } catch (error) {
         console.error('❌ Error procesando Webhook de WhatsApp:', error.message);
     }
-});
+};
+
+app.post('/', handleIncoming);
+app.post('/webhook', handleIncoming);
 
 app.listen(PORT, () => {
     console.log(`🚀 Servidor AIVA Gateway corriendo en puerto ${PORT}`);
