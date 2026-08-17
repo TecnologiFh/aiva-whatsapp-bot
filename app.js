@@ -77,12 +77,14 @@ REGLA DE ORO DE EMPRESA: Tu empresa ÚNICAMENTE vende donas artesanales, tortas 
                             { role: 'user', parts: [{ text: `System: ${systemPrompt}\n\nCliente dice: ${textBody}` }] }
                         ]
                     },
-                    { timeout: 10000 }
+                    { timeout: 20000 }
                 );
                 replyText = geminiRes.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
             } catch (e) {
                 console.error('⚠️ Error en Gemini API:', e.message);
             }
+        } else {
+            console.log('⚠️ GEMINI_API_KEY no está configurada en Render Environment.');
         }
 
         // Fallback a OpenAI si Gemini no respondió
@@ -99,7 +101,7 @@ REGLA DE ORO DE EMPRESA: Tu empresa ÚNICAMENTE vende donas artesanales, tortas 
                     },
                     {
                         headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
-                        timeout: 10000
+                        timeout: 15000
                     }
                 );
                 replyText = openAiRes.data.choices?.[0]?.message?.content || '';
@@ -109,8 +111,10 @@ REGLA DE ORO DE EMPRESA: Tu empresa ÚNICAMENTE vende donas artesanales, tortas 
         }
 
         if (!replyText) {
-            replyText = '¡Hola! Bienvenid@ a Pastelería Donuts Fs. ¿En qué te puedo ayudar hoy? 🍩';
+            replyText = '¡Hola! Bienvenid@ a Pastelería Donuts Fs. 🍩 ¿En qué te puedo ayudar hoy? Disponemos de Dona Glaseada Clásica, Dona Doña Pepa y Dona Sublime.';
         }
+
+        console.log(`🤖 Respuesta generada por la IA: "${replyText}"`);
 
         // Responder al WhatsApp del Cliente mediante Meta Cloud API
         if (WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_ACCESS_TOKEN) {
@@ -130,10 +134,11 @@ REGLA DE ORO DE EMPRESA: Tu empresa ÚNICAMENTE vende donas artesanales, tortas 
                 );
                 console.log(`📤 Respuesta enviada exitosamente a ${from}. Message ID:`, metaRes.data?.messages?.[0]?.id);
             } catch (metaErr) {
-                console.error('❌ Error enviando mensaje por Meta API:', JSON.stringify(metaErr.response?.data || metaErr.message));
+                const errorData = metaErr.response?.data || metaErr.message;
+                console.error(`⚠️ Nota sobre el envío a ${from}:`, JSON.stringify(errorData));
             }
         } else {
-            console.log(`ℹ️ [Atención] Faltan credenciales de Meta. Configura WHATSAPP_PHONE_NUMBER_ID y WHATSAPP_ACCESS_TOKEN en las variables de Render. Respuesta generada: "${replyText}"`);
+            console.log(`ℹ️ [Faltan credenciales] Asigna WHATSAPP_PHONE_NUMBER_ID y WHATSAPP_ACCESS_TOKEN en las variables de Render.`);
         }
 
     } catch (error) {
