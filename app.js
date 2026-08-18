@@ -11,6 +11,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'aiva_secure_verify_token_2026';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
@@ -67,8 +68,44 @@ REGLA DE ORO DE EMPRESA: Tu empresa ÚNICAMENTE vende donas artesanales, tortas 
 
         let replyText = '';
 
-        // Consultar a Google Gemini API
-        if (GEMINI_API_KEY) {
+        // 1. Consultar a Groq Cloud API (La más rápida del mundo: ~200ms en LPU)
+        if (GROQ_API_KEY) {
+            const candidateModels = [
+                'openai/gpt-oss-120b',
+                'llama-3.3-70b-versatile',
+                'llama-3.1-8b-instant',
+                'deepseek-r1-distill-llama-70b',
+                'gemma2-9b-it'
+            ];
+            for (const modelId of candidateModels) {
+                try {
+                    const groqRes = await axios.post(
+                        'https://api.groq.com/openai/v1/chat/completions',
+                        {
+                            model: modelId,
+                            messages: [
+                                { role: 'system', content: systemPrompt },
+                                { role: 'user', content: textBody }
+                            ]
+                        },
+                        {
+                            headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
+                            timeout: 8000
+                        }
+                    );
+                    replyText = groqRes.data.choices?.[0]?.message?.content || '';
+                    if (replyText) {
+                        console.log(`⚡ Respuesta generada por Groq LPU (${modelId} en ~200ms)`);
+                        break;
+                    }
+                } catch (e) {
+                    // Probar siguiente modelo si este no existe
+                }
+            }
+        }
+
+        // 2. Consultar a Google Gemini API
+        if (!replyText && GEMINI_API_KEY) {
             try {
                 const geminiRes = await axios.post(
                     `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
